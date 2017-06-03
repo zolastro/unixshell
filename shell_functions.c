@@ -5,7 +5,7 @@ void print_prompt(){
     char user[1000];
 		getlogin_r(user, sizeof(user));
 		getcwd(current_working_directory, sizeof(current_working_directory));
-    printf("%s%s@my-terminal:", KGRN, user);
+    printf("%s%s@my-terminal:%s", KGRN, user,KNRM);
     printf("%s%s%s $ ",KCYN, current_working_directory, KNRM);
     fflush(stdout);
 }
@@ -19,37 +19,40 @@ void create_child(char** command_arguments){
   pid_t my_pid = getpid();
   new_process_group(my_pid);
   execvp(command_arguments[0], command_arguments);
-  fprintf(stderr, "%sError: command not found: %s\n", KRED, command_arguments[0]);
+  fprintf(stderr, "%sError: command not found: %s%s\n", KRED, command_arguments[0],KNRM);
   exit(-1);
 }
 
 int wait_foreground_process(pid_t pid_fork){
-  pid_t pid_wait;
+  pid_t wait_status;
   int wait_info;
-	int wait_status;
 	enum status wait_status_result;
-  char buffer[2000];
-	char termination_type[16];
-  waitpid(-1, &wait_status, WUNTRACED | WCONTINUED);
 
+  set_terminal(pid_fork);
+
+  waitpid(pid_fork, &wait_status, WUNTRACED | WCONTINUED);
   set_terminal(getpid());
+  job* current_job = get_item_bypid(list_of_jobs, pid_fork);
 
   if (WIFEXITED(wait_status)){
     wait_info = WEXITSTATUS(wait_status);
-    sprintf(buffer, "parent: child %d terminated with exit(%d)\n", pid_fork, wait_info);
+    printf("%sparent: child %d terminated with exit(%d)%s\n", KMAG,pid_fork, wait_info, KNRM);
+    delete_job(list_of_jobs, current_job);
   }
   if (WIFSIGNALED(wait_status)){
         wait_info = WTERMSIG(wait_status);
-        sprintf(buffer, "parent: child %d kill by signal %d\n", pid_fork, wait_info);
+        printf("%sparent: child %d kill by signal %d%s\n",KMAG, pid_fork, wait_info, KNRM);
+        delete_job(list_of_jobs, current_job);
       }
     if (WIFSTOPPED(wait_status)){
         wait_info = WSTOPSIG(wait_status);
-        sprintf(buffer, "parent: child %d stopped by signal %d\n", pid_fork, wait_info);
+        current_job->state = STOPPED;
+        printf("%sparent: child %d stopped by signal %d%s\n",KMAG, pid_fork, wait_info, KNRM);
       }
     if (WIFCONTINUED(wait_status)){
-        sprintf(buffer, "parent: child %d continued\n", pid_fork);
-      }
-    printf("%s%S\n", KMAG, buffer);
+        printf("%sparent: child %d continued%s\n",KMAG, pid_fork, KNRM);
+        current_job->state = FOREGROUND;
+    }
     return wait_info;
 }
 
@@ -101,18 +104,20 @@ void execute_jobs(){
 void child_handler(int signal_number){
   int i;
   int wait_status, wait_info;
-  for(i = 0; i < list_size(list_of_jobs);i++){
+  job* current_job;
+  for(i = 1; i <= list_size(list_of_jobs);i++){
+    current_job = get_item_bypos(list_of_jobs, i);
     waitpid(-1, &wait_status, WUNTRACED | WNOHANG);
     if (WIFEXITED(wait_status)){
       wait_info = WEXITSTATUS(wait_status);
-      printf("Process exited! %d\n", wait_info);
+      delete_job(list_of_jobs, current_job);
     }
     if (WIFSTOPPED(wait_status)){
       wait_info = WSTOPSIG(wait_status);
-      printf("Process stopped! %d\n", wait_info);
+      current_job->state = STOPPED;
     }
     if (WIFCONTINUED(wait_status)){
-      printf("Process continued! %d\n", wait_info);
+      current_job->state = FOREGROUND;
     }
   }
 }

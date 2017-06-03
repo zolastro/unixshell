@@ -18,7 +18,6 @@ int main(void)
 	while (true){
 		ignore_terminal_signals();
     print_prompt();
-
 		get_command(command_input, MAX_LENGTH, command_arguments, &is_background);
 
 		if(!is_empty(command_arguments[0])){
@@ -30,19 +29,15 @@ int main(void)
 					create_child(command_arguments);
 				}else{
 					add_job(list_of_jobs, new_job(pid_fork, command_arguments[0], (is_background) ? BACKGROUND : FOREGROUND));
-					print_job_list(list_of_jobs);
 					if(is_background){
 						printf("%sLog: process [%d] -> %s is running in is_background.%s\n", KMAG, pid_fork, command_input, KNRM);
 					}else{
-						set_terminal(pid_fork);
 						int wait_info = wait_foreground_process(pid_fork);
 						if(wait_info == -1){
 							exit(-1);
 						}
 
-						delete_job(list_of_jobs, get_item_bypid(list_of_jobs, pid_fork));
-
-						printf("%sLog: foreground pid: %d, command: %s, info: %d%s\n", KMAG, pid_fork, command_input, wait_info, KNRM);
+						//printf("%sLog: foreground pid: %d, command: %s, info: %d%s\n", KMAG, pid_fork, command_input, wait_info, KNRM);
 					}
 				}
 			}
