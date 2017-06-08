@@ -40,6 +40,7 @@ int wait_foreground_process(pid_t pid_fork);
 bool is_built_in_command(char* command);
 void execute_built_in_command(char** command_arguments);
 void execute_cd(char** command_arguments);
+void execute_fg(char** command_arguments);
 void execute_jobs();
 void child_handler(int signal_number);
 

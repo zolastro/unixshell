@@ -27,12 +27,15 @@ int wait_foreground_process(pid_t pid_fork){
   pid_t wait_status;
   int wait_info;
 	enum status wait_status_result;
-
-  set_terminal(pid_fork);
-
-  waitpid(pid_fork, &wait_status, WUNTRACED | WCONTINUED);
-  set_terminal(getpid());
   job* current_job = get_item_bypid(list_of_jobs, pid_fork);
+
+
+  block_SIGCHLD();
+  set_terminal(pid_fork);
+  killpg(pid_fork, SIGCONT);
+
+  waitpid(pid_fork, &wait_status, WUNTRACED);
+  set_terminal(getpid());
 
   if (WIFEXITED(wait_status)){
     wait_info = WEXITSTATUS(wait_status);
@@ -53,6 +56,7 @@ int wait_foreground_process(pid_t pid_fork){
         printf("%sparent: child %d continued%s\n",KMAG, pid_fork, KNRM);
         current_job->state = FOREGROUND;
     }
+    unblock_SIGCHLD();
     return wait_info;
 }
 
@@ -61,6 +65,8 @@ bool is_built_in_command(char* command){
   if(strcmp(command, "cd") == 0){
     ans = true;
   }else if(strcmp(command, "jobs") == 0){
+    ans = true;
+  }else if(strcmp(command, "fg") == 0){
     ans = true;
   }
   return ans;
@@ -71,6 +77,8 @@ void execute_built_in_command(char** command_arguments){
     execute_cd(command_arguments);
   }else if(strcmp(command_arguments[0], "jobs") == 0){
     execute_jobs();
+  }else if(strcmp(command_arguments[0], "fg") == 0){
+    execute_fg(command_arguments);
   }
 }
 
@@ -101,30 +109,38 @@ void execute_jobs(){
   print_job_list(list_of_jobs);
 }
 
-void child_handler(int signal_number){
-  int i;
-  int wait_status, wait_info;
+void execute_fg(char** command_arguments){
+  int job_number = 1;
   job* current_job;
+  if(!is_empty(command_arguments[1])){
+    job_number = atoi(command_arguments[1]);
+  }
+  if(list_size(list_of_jobs) < 1){
+    printf("%sThere isn't any process running in background%s\n", KMAG, KNRM);
+    return;
+  }else if(job_number < 1 ||list_size(list_of_jobs) < job_number){
+      printf("%sbash: fg: %d: no such job%s\n", KRED, job_number, KNRM);
+      return;
+  }
+  current_job = get_item_bypos(list_of_jobs, job_number);
+  wait_foreground_process(current_job->pgid);
+}
+
+void child_handler(int signal_number){
+  int wait_status;
+  job* current_job;
+  int i;
   for(i = 1; i <= list_size(list_of_jobs);i++){
     current_job = get_item_bypos(list_of_jobs, i);
-    waitpid(-1, &wait_status, WUNTRACED | WNOHANG);
+    waitpid(current_job->pgid, &wait_status, WUNTRACED | WNOHANG);
     if (WIFEXITED(wait_status)){
-      wait_info = WEXITSTATUS(wait_status);
       delete_job(list_of_jobs, current_job);
     }
     if (WIFSTOPPED(wait_status)){
-      wait_info = WSTOPSIG(wait_status);
       current_job->state = STOPPED;
     }
     if (WIFCONTINUED(wait_status)){
       current_job->state = FOREGROUND;
     }
-  }
-}
-
-
-void process_delayed_signals(int signal_number){
-  if (signal_number == SIGINT){
-
   }
 }
